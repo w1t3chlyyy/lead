@@ -31,6 +31,7 @@ Vercel Cron: /api/digest раз в сутки (сводка + чистка)
    - через CLI из папки проекта: `npm i -g vercel && vercel --prod`, затем добавь переменные
      (`vercel env add ИМЯ production` или в Dashboard → Settings → Environment Variables) и повтори `vercel --prod`;
    - или залей папку в GitHub-репозиторий и сделай Import в Vercel.
+   Точка входа — `app.py` (FastAPI), Vercel подхватывает её сам, Framework Preset оставь «Other»/автоопределение.
    Переменные берёшь из `.env.example` (`APP_URL` можно не задавать, Vercel подставит домен сам).
    `CRON_SECRET` придумай сам: только `A-Z a-z 0-9 _ -`, длинный и случайный.
 5. **Вебхук**: открой в браузере `https://<твой-домен>/api/setup?key=<CRON_SECRET>`.
