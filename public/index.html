@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Статистика лидов</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:var(--tg-theme-bg-color,#f4f6f3);--fg:var(--tg-theme-text-color,#14201a);
+  --mut:var(--tg-theme-hint-color,#6b7a72);--card:var(--tg-theme-secondary-bg-color,#e9eee9);
+  --ink:#0f6b4f;--ink2:#9fd8c2;--warn:#b4541a;
+  --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 -apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:calc(16px + var(--safe-t)) 16px calc(24px + var(--safe-b));max-width:560px;margin:0 auto}
+h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.sub{color:var(--mut);font-size:13px;margin:2px 0 18px}
+h2{font-size:15px;font-weight:650;margin:26px 0 10px}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kpi{background:var(--card);border-radius:14px;padding:12px 14px}
+.kpi b{display:block;font-size:26px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.kpi span{color:var(--mut);font-size:12.5px}
+.kpi.main{grid-column:span 2;background:var(--ink);color:#fff}
+.kpi.main span{color:#cdeee1}.kpi.main b{font-size:40px}
+.chart{display:flex;align-items:flex-end;gap:4px;height:120px;background:var(--card);border-radius:14px;padding:12px 10px 8px}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:4px}
+.bar{width:100%;min-height:2px;background:var(--ink);border-radius:4px 4px 0 0}
+.bar.zero{background:var(--ink2);opacity:.5}
+.col i{font-style:normal;font-size:10px;color:var(--mut)}
+.col em{font-style:normal;font-size:10.5px;font-variant-numeric:tabular-nums}
+.row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:14px}
+.row .name{flex:0 0 42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .track{flex:1;height:8px;background:var(--card);border-radius:4px;overflow:hidden}
+.row .fill{height:100%;background:var(--ink);border-radius:4px}
+.row .n{flex:0 0 auto;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;color:var(--mut)}
+.fun .fill{background:var(--ink2)}.fun .row:last-child .fill{background:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px}
+.chip b{font-variant-numeric:tabular-nums}
+.empty,.err{color:var(--mut);padding:24px 0;text-align:center}
+.err{color:var(--warn)}
+@media (prefers-reduced-motion:no-preference){.bar,.fill{transition:height .4s,width .4s}}
+</style>
+</head>
+<body>
+<h1>Статистика лидов</h1>
+<p class="sub" id="sub">Загрузка…</p>
+<div id="app"></div>
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = (n) => new Intl.NumberFormat('ru').format(n);
+
+function rows(list, cls = '') {
+  if (!list.length) return '<p class="empty">Пока нет данных</p>';
+  const max = Math.max(...list.map((x) => x.n), 1);
+  return `<div class="${cls}">` + list.map((x) =>
+    `<div class="row"><div class="name">${esc(x.name)}</div><div class="track"><div class="fill" style="width:${Math.round(100 * x.n / max)}%"></div></div><div class="n">${num(x.n)}</div></div>`
+  ).join('') + '</div>';
+}
+
+function ago(iso) {
+  if (!iso) return 'ещё не запускался';
+  const s = (Date.now() - new Date(iso)) / 1000;
+  return s < 3600 ? `${Math.max(1, Math.round(s / 60))} мин назад` : s < 86400 ? `${Math.round(s / 3600)} ч назад` : `${Math.round(s / 86400)} д назад`;
+}
+
+function render(d) {
+  $('#sub').textContent = `${d.enabled ? 'Поиск идёт' : 'Поиск на паузе'} · последний скан ${ago(d.last_scan)} · окно ${d.max_age_days} дн.`;
+  const maxL = Math.max(...d.daily.map((x) => x.leads), 1);
+  const bars = d.daily.map((x) => {
+    const h = Math.round(86 * x.leads / maxL);
+    return `<div class="col" title="${x.d}: ${x.leads}"><em>${x.leads || ''}</em><div class="bar ${x.leads ? '' : 'zero'}" style="height:${x.leads ? Math.max(h, 6) : 2}px"></div><i>${x.d.slice(8)}</i></div>`;
+  }).join('');
+  const s = d.status, f = d.funnel;
+  $('#app').innerHTML = `
+    <div class="kpis">
+      <div class="kpi main"><b>${num(d.week)}</b><span>лидов за 7 дней · сегодня ${num(d.today)}</span></div>
+      <div class="kpi"><b>${num(d.total)}</b><span>за 30 дней</span></div>
+      <div class="kpi"><b>${d.avg_score}%</b><span>средняя уверенность</span></div>
+      <div class="kpi"><b>${d.win_rate === null ? '—' : d.win_rate + '%'}</b><span>закрыто сделкой</span></div>
+      <div class="kpi"><b>${num(d.runs)}</b><span>запусков${d.errors ? ` · ошибок ${d.errors}` : ''}</span></div>
+    </div>
+    <h2>Лиды по дням</h2><div class="chart">${bars}</div>
+    <h2>Статусы</h2>
+    <div class="chips">
+      <span class="chip">🆕 новые <b>${s.new || 0}</b></span>
+      <span class="chip">🔧 в работе <b>${s.work || 0}</b></span>
+      <span class="chip">💰 сделки <b>${s.won || 0}</b></span>
+      <span class="chip">🚫 не сложилось <b>${s.lost || 0}</b></span>
+      <span class="chip">❌ не лиды <b>${s.bad || 0}</b></span>
+    </div>
+    <h2>Воронка за 30 дней</h2>
+    ${rows([
+      { name: 'Найдено поиском', n: f.found }, { name: 'Свежие (до 3 дней)', n: f.fresh },
+      { name: 'Прошли фильтр', n: f.passed }, { name: 'Проверил Qwen', n: f.llm }, { name: 'Лиды', n: f.leads },
+    ], 'fun')}
+    <h2>Что просят чаще всего</h2>${rows(d.top_match)}
+    <h2>Где водятся клиенты</h2>${rows(d.top_chats)}
+    <h2>Лучшие поисковые фразы</h2>${rows(d.top_queries)}`;
+}
+
+fetch('/api/stats', { headers: { 'X-Init-Data': tg ? tg.initData : '' } })
+  .then((r) => r.json().then((j) => (r.ok ? j : Promise.reject(j.error || 'Ошибка'))))
+  .then(render)
+  .catch((e) => { $('#sub').textContent = ''; $('#app').innerHTML = `<p class="err">${esc(e)}</p>`; });
+</script>
+</body>
+</html>
