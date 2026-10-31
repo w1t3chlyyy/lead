@@ -16,7 +16,7 @@ from telethon.tl.functions.messages import SearchGlobalRequest
 from telethon.tl.types import Channel, InputMessagesFilterEmpty, InputPeerEmpty, Message
 
 from . import catalog, db, llm, tg, ui
-from .config import (MAX_AGE_LIMIT_DAYS, MAX_PUSH_PER_RUN, OWNER_IDS, TG_API_HASH, TG_API_ID,
+from .config import (LLM_DAILY_CAP, MAX_AGE_LIMIT_DAYS, MAX_PUSH_PER_RUN, OWNER_IDS, TG_API_HASH, TG_API_ID,
                      TG_SESSION_STRING)
 from .keywords import DEFAULT_QUERIES, quick_filter
 
@@ -63,6 +63,8 @@ async def _process(http, cfg, cat, bad, m, chat, sender, query, st, sem) -> bool
     if not quick_filter(text):
         return False
     st["passed"] += 1
+    if st["llm"] >= cfg.get("_llm_left", 10**9):  # дневной лимит Qwen: оставляем сообщение на потом
+        return False
     norm = re.sub(r"\W+", " ", text.lower()).strip()
     keys = [f"m:{chat.id}:{m.id}", f"t:{hashlib.sha1(norm.encode()).hexdigest()}"]
     if not await db.claim(http, keys):  # уже видели это сообщение или кросс-пост
@@ -167,6 +169,18 @@ async def run_scan(http, budget: int = 30, trigger: str = "cron") -> dict:
         return {"error": "TG_API_ID / TG_API_HASH / TG_SESSION_STRING не заданы"}
     if not await db.acquire_lock(http, budget + 30):
         return {"skipped": "locked"}  # другой запуск ещё идёт: две копии одной сессии Telegram не терпит
+
+    try:
+        day0 = db.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        used = sum(r["llm"] or 0 for r in await db.sel(
+            http, "lb_runs", select="llm", created_at=f"gte.{db.iso(day0)}", limit="5000"))
+        cfg["_llm_left"] = max(0, LLM_DAILY_CAP - used)
+    except Exception as e:
+        print(f"[scan] не посчитал квоту: {e}")
+        cfg["_llm_left"] = LLM_DAILY_CAP
+    if cfg["_llm_left"] <= 0:
+        await db.release_lock(http)
+        return {"skipped": f"дневной лимит Qwen ({LLM_DAILY_CAP}) исчерпан"}
 
     st = dict(queries=0, found=0, fresh=0, passed=0, llm=0, leads=0, errors=0)
     err = None
