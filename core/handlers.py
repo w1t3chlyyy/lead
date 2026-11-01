@@ -147,10 +147,14 @@ async def on_callback(http, cb: dict) -> None:
 
     # --- ручной скан ---
     elif data == "m:scan":
-        await tg.answer(http, cb["id"], "Ищу…")
-        await tg.edit(http, cid, mid, "🔎 Сканирую публичные чаты за последние дни…\nЭто займёт до минуты.")
-        r = await scanner.run_scan(http, budget=28, trigger="manual")
-        await tg.edit(http, cid, mid, _scan_summary(r), [[ui.b("📥 Новые лиды", "m:leads:new:0")], ui.BACK])
+        await tg.answer(http, cb["id"], "Ищу, пока не найду…")
+        await tg.edit(http, cid, mid, "🔎 Ищу по всем фразам, пока не найду лид (до ~40 с)…")
+        r = await scanner.run_scan(http, budget=40, trigger="manual", greedy=True, stop_on_lead=True)
+        text = _scan_summary(r)
+        if not r.get("skipped") and not r.get("leads"):
+            text += "\n\nПока лидов нет. Нажми «Искать дальше»: пойдёт следующая порция фраз."
+        kb = [[ui.b("🔁 Искать дальше", "m:scan")], [ui.b("📥 Новые лиды", "m:leads:new:0")], ui.BACK]
+        await tg.edit(http, cid, mid, text, kb)
         return
 
     # --- настройки ---
