@@ -173,6 +173,7 @@ def queries_screen(rows: list, page: int, has_next: bool) -> tuple[str, list]:
         nav.append(b("▶️", f"m:q:{page + 1}"))
     if nav:
         kb.append(nav)
+    kb.append([b("🤖 Придумать фразы (Qwen)", "q:gen")])
     kb.append([b("➕ Добавить", "q:add"), b("♻️ По умолчанию", "q:reset")])
     kb.append(BACK)
     return text, kb
