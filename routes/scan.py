@@ -14,5 +14,5 @@ async def main(req):
     except ValueError:
         budget = 18
     async with httpx.AsyncClient(timeout=25) as http:
-        return 200, await run_scan(http, budget=budget, trigger="cron"), JSON
-
+        greedy = req.query.get("greedy") == "1"  # ?greedy=1 — идти по всем фразам, пока хватает бюджета
+        return 200, await run_scan(http, budget=budget, trigger="cron", greedy=greedy), JSON
