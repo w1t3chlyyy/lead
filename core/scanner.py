@@ -106,11 +106,11 @@ async def _process(http, cfg, cat, bad, m, chat, sender, query, st, sem) -> bool
     return True
 
 
-async def _scan(http, client, cfg, st, t0, budget) -> None:
+async def _scan(http, client, cfg, st, t0, budget, greedy=False, stop_on_lead=False) -> None:
     await ensure_queries(http)
     days = max(1, min(int(cfg["max_age_days"]), MAX_AGE_LIMIT_DAYS))
     cutoff = db.now() - timedelta(days=days)
-    n = int(cfg["queries_per_run"])
+    n = 40 if greedy else int(cfg["queries_per_run"])  # greedy: идём по всем фразам, пока хватает времени
     queries = await db.sel(http, "lb_queries", select="id,q,hits", active="eq.true",
                            order="last_run.asc.nullsfirst", limit=str(n))
     cat = await catalog.get_catalog(http)
@@ -161,9 +161,12 @@ async def _scan(http, client, cfg, st, t0, budget) -> None:
             elif r:
                 got += 1
         await db.upd(http, "lb_queries", {"last_run": db.iso(db.now()), "hits": q["hits"] + got}, id=f"eq.{q['id']}")
+        if stop_on_lead and st["leads"] > 0:
+            break
 
 
-async def run_scan(http, budget: int = 30, trigger: str = "cron") -> dict:
+async def run_scan(http, budget: int = 30, trigger: str = "cron", greedy: bool = False,
+                   stop_on_lead: bool = False) -> dict:
     t0 = time.time()
     cfg = await db.get_settings(http)
     if trigger == "cron" and not cfg["enabled"]:
@@ -192,7 +195,7 @@ async def run_scan(http, budget: int = 30, trigger: str = "cron") -> dict:
         await client.connect()
         if not await client.is_user_authorized():
             raise RuntimeError("Telegram-сессия не авторизована: перегенерируй TG_SESSION_STRING")
-        await asyncio.wait_for(_scan(http, client, cfg, st, t0, budget), timeout=budget + 10)
+        await asyncio.wait_for(_scan(http, client, cfg, st, t0, budget, greedy, stop_on_lead), timeout=budget + 10)
     except asyncio.TimeoutError:
         err = "timeout"
     except Exception as e:
