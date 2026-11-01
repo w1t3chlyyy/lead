@@ -126,11 +126,14 @@ async def _scan(http, client, cfg, st, t0, budget) -> None:
             msgs, chats, users = await _search(client, q["q"], cutoff)
         except Exception as e:
             st["errors"] += 1
+            st["last_error"] = f"{type(e).__name__}: {e}"[:160]
+            st.setdefault("detail", []).append(f"{q['q']} — ошибка")
             print(f"[scan] '{q['q']}': {e}")
             if "FloodWait" in type(e).__name__:
                 break
             continue
         st["found"] += len(msgs)
+        st.setdefault("detail", []).append(f"{q['q']} — {len(msgs)}")
 
         cands = []
         for m in msgs:
@@ -203,6 +206,7 @@ async def run_scan(http, budget: int = 30, trigger: str = "cron") -> dict:
         await db.release_lock(http)
 
     ms = int((time.time() - t0) * 1000)
+    detail, last = st.pop("detail", []), st.pop("last_error", None)
     try:
         await db.ins(http, "lb_runs", [{**st, "trigger": trigger, "ms": ms, "error": err}])
         await db.set_setting(http, "last_scan", db.iso(db.now()))
@@ -210,4 +214,4 @@ async def run_scan(http, budget: int = 30, trigger: str = "cron") -> dict:
         print(f"[scan] не записал статистику: {e}")
     if err and "не авторизована" in err:
         await tg.notify_owners(http, f"⚠️ {err}")
-    return {**st, "ms": ms, "error": err}
+    return {**st, "ms": ms, "error": err, "detail": detail, "last_error": last}
