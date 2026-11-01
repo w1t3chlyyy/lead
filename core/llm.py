@@ -68,3 +68,26 @@ async def redraft(http, text: str, catalog: str, prev: str) -> str | None:
     except Exception as e:
         print(f"[qwen] redraft ошибка: {e}")
         return None
+
+
+async def suggest_queries(http, catalog: str, existing: list[str], n: int = 25) -> list[str]:
+    """Qwen придумывает короткие поисковые фразы под каталог (один вызов)."""
+    try:
+        raw = await _chat(http, [
+            {"role": "system", "content": (
+                "Ты помогаешь находить заказчиков в публичных Telegram-чатах. По каталогу владельца придумай "
+                "поисковые фразы так, как реальные клиенты пишут в чатах, когда ищут такую услугу или товар. "
+                "Фразы короткие (1-3 слова), нижний регистр, разные формулировки, сленг, русские и английские, "
+                "без кавычек и знаков препинания. Не повторяй уже существующие. "
+                'Верни строго JSON: {"queries": ["...", "..."]}\n\n' + catalog)},
+            {"role": "user", "content": f"Нужно {n} новых фраз. Уже есть: " + "; ".join(existing[:60])},
+        ], json_mode=True, temperature=0.8, timeout=40)
+        out = []
+        for q in (_parse(raw) or {}).get("queries", []):
+            q = " ".join(str(q).lower().split())[:80]
+            if len(q) >= 3 and q not in existing and q not in out:
+                out.append(q)
+        return out[:n]
+    except Exception as e:
+        print(f"[qwen] suggest ошибка: {e}")
+        return []
