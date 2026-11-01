@@ -66,6 +66,12 @@ def _scan_summary(r: dict) -> str:
     s = (f"✅ Готово за {r['ms'] // 1000} с\nФраз: {r['queries']} · найдено: {r['found']} · "
          f"свежих: {r['fresh']}\nПрошло фильтр: {r['passed']} · к Qwen: {r['llm']} · "
          f"<b>лидов: {r['leads']}</b>")
+    if r.get("detail"):
+        s += "\n\nНайдено по фразам:\n" + "\n".join(f"• {e(d)}" for d in r["detail"])
+    if r.get("errors"):
+        s += f"\n⚠️ Ошибок: {r['errors']}"
+        if r.get("last_error"):
+            s += f" · {e(r['last_error'])}"
     if r.get("error"):
         s += f"\n⚠️ {e(str(r['error']))}"
     return s
