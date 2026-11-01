@@ -184,6 +184,18 @@ async def on_callback(http, cb: dict) -> None:
             await db.set_setting(http, "awaiting", "add_query")
             await tg.edit(http, cid, mid, "Пришли фразу, по которой искать (например: <code>нужен дизайнер</code>).",
                           [[ui.b("Отмена", "m:q:0")]])
+        elif p[1] == "gen":
+            await tg.answer(http, cb["id"], "Qwen придумывает фразы…")
+            have = [r["q"] for r in await db.sel(http, "lb_queries", select="q", limit="1000")]
+            new = await llm.suggest_queries(http, await catalog.get_catalog(http), have)
+            if new:
+                await db.ins(http, "lb_queries", [{"q": q} for q in new], on_conflict="q", ignore=True)
+                await tg.send(http, cid, f"🤖 Добавлено фраз: <b>{len(new)}</b>\n" +
+                              "\n".join(f"• {e(q)}" for q in new[:12]) + ("\n…" if len(new) > 12 else ""))
+            else:
+                await tg.send(http, cid, "Qwen не вернул фразы, попробуй ещё раз.")
+            await show_queries(http, cid, None, 0)
+            return
         elif p[1] == "reset":
             from .keywords import DEFAULT_QUERIES
             await db.ins(http, "lb_queries", [{"q": q} for q in DEFAULT_QUERIES], on_conflict="q", ignore=True)
