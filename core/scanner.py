@@ -5,8 +5,6 @@ Telethon подключается, делает несколько SearchGlobal-
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import re
 import time
 from datetime import timedelta
 
@@ -67,8 +65,10 @@ async def _process(http, cfg, catalog_items, bad, m, chat, sender, query, st, se
     if st["llm"] >= cfg.get("_llm_left", 10**9):
         st["quota_skipped"] += 1
         return False
-    norm = re.sub(r"\W+", " ", text.lower()).strip()
-    keys = [f"m:{chat.id}:{m.id}", f"t:{hashlib.sha1(norm.encode()).hexdigest()}"]
+    # Deduplicate repeated search hits by Telegram message identity only.
+    # A global text hash wrongly suppresses identical buyer requests in
+    # different chats (especially short posts such as "ищу дизайнера").
+    keys = [f"m:{chat.id}:{m.id}"]
     if not await db.claim(http, keys):  # уже видели это сообщение или кросс-пост
         st["duplicates"] += 1
         return False
