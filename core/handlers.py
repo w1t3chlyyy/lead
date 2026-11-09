@@ -66,6 +66,7 @@ def _scan_summary(r: dict) -> str:
     s = (f"✅ Готово за {r['ms'] // 1000} с\nФраз: {r['queries']} · найдено: {r['found']} · "
          f"свежих: {r['fresh']}\nКандидаты: {r['passed']} · дубликаты: {r.get('duplicates', 0)} · "
          f"лимит пропустил: {r.get('quota_skipped', 0)}\nК Qwen: {r['llm']} · "
+         f"не лид: {r.get('qwen_rejected', 0)} · ниже порога: {r.get('low_score', 0)} · "
          f"<b>лидов: {r['leads']}</b>")
     if r.get("detail"):
         s += "\n\nНайдено по фразам:\n" + "\n".join(f"• {e(d)}" for d in r["detail"])

@@ -100,7 +100,10 @@ function render(d) {
       { name: 'Кандидаты по намерению', n: f.passed },
       { name: 'Уже обработаны (дубликаты)', n: f.duplicates },
       { name: 'Пропущено по лимиту Qwen', n: f.quota_skipped },
-      { name: 'Проверил Qwen', n: f.llm }, { name: 'Лиды', n: f.leads },
+      { name: 'Проверил Qwen', n: f.llm },
+      { name: 'Qwen: не лид', n: f.qwen_rejected },
+      { name: 'Qwen: ниже порога', n: f.low_score },
+      { name: 'Лиды', n: f.leads },
     ], 'fun')}
     <h2>Что просят чаще всего</h2>${rows(d.top_match)}
     <h2>Где водятся клиенты</h2>${rows(d.top_chats)}

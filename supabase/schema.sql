@@ -52,6 +52,8 @@ create table if not exists lb_runs (
   duplicates int default 0,
   quota_skipped int default 0,
   llm        int default 0,
+  qwen_rejected int default 0,
+  low_score  int default 0,
   leads      int default 0,
   errors     int default 0,
   ms         int default 0,

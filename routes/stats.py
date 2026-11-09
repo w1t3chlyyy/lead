@@ -17,7 +17,7 @@ async def main(req):
         leads = await db.sel(http, "lb_leads", select="status,score,match,chat_title,query,created_at",
                              created_at=f"gte.{since}", order="created_at.desc", limit="5000")
         runs = await db.sel(http, "lb_runs",
-                            select="created_at,queries,found,fresh,passed,duplicates,quota_skipped,llm,leads,errors,ms",
+                            select="created_at,queries,found,fresh,passed,duplicates,quota_skipped,llm,qwen_rejected,low_score,leads,errors,ms",
                             created_at=f"gte.{since}", order="created_at.desc", limit="5000")
         queries = await db.sel(http, "lb_queries", select="q,hits,active", order="hits.desc", limit="10")
         cfg = await db.get_settings(http)
@@ -38,7 +38,8 @@ async def main(req):
     closed = status["won"] + status["lost"]
     d7 = db.iso(db.now() - timedelta(days=7))
     funnel = {k: sum(r[k] or 0 for r in runs) for k in
-              ("found", "fresh", "passed", "duplicates", "quota_skipped", "llm", "leads")}
+              ("found", "fresh", "passed", "duplicates", "quota_skipped", "llm",
+               "qwen_rejected", "low_score", "leads")}
     scores = [l["score"] for l in leads if l["score"] is not None]
 
     def top(key, n=6):

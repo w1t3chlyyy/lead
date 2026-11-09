@@ -91,7 +91,14 @@ async def _process(http, cfg, catalog_items, bad, m, chat, sender, query, st, se
         score = int(verdict.get("score", 0))
     except (TypeError, ValueError):
         score = 0
-    if not verdict.get("is_lead") or score < cfg["min_score"]:
+    reason = " ".join(str(verdict.get("reason") or "").split())[:160]
+    if not verdict.get("is_lead"):
+        st["qwen_rejected"] += 1
+        print(f"[scan] Qwen: not a lead; score={score}; reason={reason!r}")
+        return False
+    if score < cfg["min_score"]:
+        st["low_score"] += 1
+        print(f"[scan] Qwen: below threshold; score={score}; min={cfg['min_score']}; reason={reason!r}")
         return False
 
     uname = getattr(sender, "username", None) if sender else None
@@ -198,7 +205,7 @@ async def run_scan(http, budget: int = 30, trigger: str = "cron", greedy: bool =
         return {"skipped": f"дневной лимит Qwen ({LLM_DAILY_CAP}) исчерпан"}
 
     st = dict(queries=0, found=0, fresh=0, passed=0, duplicates=0,
-              quota_skipped=0, llm=0, leads=0, errors=0)
+              quota_skipped=0, llm=0, qwen_rejected=0, low_score=0, leads=0, errors=0)
     err = None
     client = TelegramClient(StringSession(TG_SESSION_STRING), TG_API_ID, TG_API_HASH)
     try:
