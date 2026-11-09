@@ -97,7 +97,10 @@ function render(d) {
     <h2>Воронка за 30 дней</h2>
     ${rows([
       { name: 'Найдено поиском', n: f.found }, { name: 'Свежие (до 3 дней)', n: f.fresh },
-      { name: 'Прошли фильтр', n: f.passed }, { name: 'Проверил Qwen', n: f.llm }, { name: 'Лиды', n: f.leads },
+      { name: 'Кандидаты по намерению', n: f.passed },
+      { name: 'Уже обработаны (дубликаты)', n: f.duplicates },
+      { name: 'Пропущено по лимиту Qwen', n: f.quota_skipped },
+      { name: 'Проверил Qwen', n: f.llm }, { name: 'Лиды', n: f.leads },
     ], 'fun')}
     <h2>Что просят чаще всего</h2>${rows(d.top_match)}
     <h2>Где водятся клиенты</h2>${rows(d.top_chats)}

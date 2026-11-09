@@ -64,7 +64,8 @@ def _scan_summary(r: dict) -> str:
     if r.get("error") and not r.get("queries"):
         return f"⚠️ {e(str(r['error']))}"
     s = (f"✅ Готово за {r['ms'] // 1000} с\nФраз: {r['queries']} · найдено: {r['found']} · "
-         f"свежих: {r['fresh']}\nПрошло фильтр: {r['passed']} · к Qwen: {r['llm']} · "
+         f"свежих: {r['fresh']}\nКандидаты: {r['passed']} · дубликаты: {r.get('duplicates', 0)} · "
+         f"лимит пропустил: {r.get('quota_skipped', 0)}\nК Qwen: {r['llm']} · "
          f"<b>лидов: {r['leads']}</b>")
     if r.get("detail"):
         s += "\n\nНайдено по фразам:\n" + "\n".join(f"• {e(d)}" for d in r["detail"])
@@ -137,7 +138,9 @@ async def on_callback(http, cb: dict) -> None:
     elif p[:2] == ["l", "re"]:
         rows = await db.sel(http, "lb_leads", id=f"eq.{p[2]}")
         if rows:
-            new = await llm.redraft(http, rows[0]["text"], await catalog.get_catalog(http), rows[0].get("reply") or "")
+            items = await catalog.get_items(http)
+            relevant = catalog.catalog_for_message(items, rows[0]["text"])
+            new = await llm.redraft(http, rows[0]["text"], relevant, rows[0].get("reply") or "")
             if new:
                 rows = await db.upd(http, "lb_leads", {"reply": new}, id=f"eq.{p[2]}")
                 await edit_lead(http, cid, mid, rows[0])
@@ -191,7 +194,9 @@ async def on_callback(http, cb: dict) -> None:
         elif p[1] == "gen":
             await tg.answer(http, cb["id"], "Qwen придумывает фразы…")
             have = [r["q"] for r in await db.sel(http, "lb_queries", select="q", limit="1000")]
-            new = await llm.suggest_queries(http, await catalog.get_catalog(http), have)
+            items = await catalog.get_items(http)
+            catalog_index = catalog.catalog_for_query_generation(items)
+            new = await llm.suggest_queries(http, catalog_index, have)
             if new:
                 await db.ins(http, "lb_queries", [{"q": q} for q in new], on_conflict="q", ignore=True)
                 await tg.send(http, cid, f"🤖 Добавлено фраз: <b>{len(new)}</b>\n" +

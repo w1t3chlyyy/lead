@@ -49,6 +49,8 @@ create table if not exists lb_runs (
   found      int default 0,
   fresh      int default 0,
   passed     int default 0,
+  duplicates int default 0,
+  quota_skipped int default 0,
   llm        int default 0,
   leads      int default 0,
   errors     int default 0,

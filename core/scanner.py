@@ -58,22 +58,31 @@ async def _search(client, q: str, cutoff, pages: int = 2):
     return msgs, chats, users
 
 
-async def _process(http, cfg, cat, bad, m, chat, sender, query, st, sem) -> bool:
+async def _process(http, cfg, catalog_items, bad, m, chat, sender, query, st, sem) -> bool:
     text = m.message
     if not quick_filter(text):
         return False
     st["passed"] += 1
-    if st["llm"] >= cfg.get("_llm_left", 10**9):  # дневной лимит Qwen: оставляем сообщение на потом
+    if st["llm"] >= cfg.get("_llm_left", 10**9):
+        st["quota_skipped"] += 1
         return False
     norm = re.sub(r"\W+", " ", text.lower()).strip()
     keys = [f"m:{chat.id}:{m.id}", f"t:{hashlib.sha1(norm.encode()).hexdigest()}"]
     if not await db.claim(http, keys):  # уже видели это сообщение или кросс-пост
+        st["duplicates"] += 1
         return False
 
     title = getattr(chat, "title", None) or "чат"
     async with sem:
+        # Recheck inside the semaphore: concurrent candidates may otherwise
+        # all pass the quota check before any one of them increments st["llm"].
+        if st["llm"] >= cfg.get("_llm_left", 10**9):
+            st["quota_skipped"] += 1
+            await db.release(http, keys)  # retry this message on a later run
+            return False
         st["llm"] += 1
-        verdict = await llm.classify(http, text, cat, title, bad)
+        relevant_catalog = catalog.catalog_for_message(catalog_items, text, query)
+        verdict = await llm.classify(http, text, relevant_catalog, title, bad)
     if verdict is None:  # сбой модели: освобождаем ключи, повторим в следующий раз
         await db.release(http, keys)
         st["errors"] += 1
@@ -113,7 +122,7 @@ async def _scan(http, client, cfg, st, t0, budget, greedy=False, stop_on_lead=Fa
     n = 40 if greedy else int(cfg["queries_per_run"])  # greedy: идём по всем фразам, пока хватает времени
     queries = await db.sel(http, "lb_queries", select="id,q,hits", active="eq.true",
                            order="last_run.asc.nullsfirst", limit=str(n))
-    cat = await catalog.get_catalog(http)
+    catalog_items = await catalog.get_items(http)
     bad = [r["text"] for r in await db.sel(http, "lb_leads", select="text", status="eq.bad",
                                            order="created_at.desc", limit="5")]
     sem = asyncio.Semaphore(4)
@@ -151,7 +160,7 @@ async def _scan(http, client, cfg, st, t0, budget, greedy=False, stop_on_lead=Fa
             cands.append((m, chat, sender))
 
         results = await asyncio.gather(
-            *[_process(http, cfg, cat, bad, m, c, s, q["q"], st, sem) for m, c, s in cands],
+            *[_process(http, cfg, catalog_items, bad, m, c, s, q["q"], st, sem) for m, c, s in cands],
             return_exceptions=True)
         got = 0
         for r in results:
@@ -188,7 +197,8 @@ async def run_scan(http, budget: int = 30, trigger: str = "cron", greedy: bool =
         await db.release_lock(http)
         return {"skipped": f"дневной лимит Qwen ({LLM_DAILY_CAP}) исчерпан"}
 
-    st = dict(queries=0, found=0, fresh=0, passed=0, llm=0, leads=0, errors=0)
+    st = dict(queries=0, found=0, fresh=0, passed=0, duplicates=0,
+              quota_skipped=0, llm=0, leads=0, errors=0)
     err = None
     client = TelegramClient(StringSession(TG_SESSION_STRING), TG_API_ID, TG_API_HASH)
     try:
