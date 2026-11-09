@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from core.catalog import _fetch_all, _prepare_items, catalog_for_message
-from core.keywords import quick_filter
+from core.keywords import is_buyer_query_phrase, quick_filter
 
 
 class FakeResponse:
@@ -40,6 +40,13 @@ class SearchMatchingTests(unittest.TestCase):
 
     def test_sales_post_without_buyer_intent_is_rejected(self):
         self.assertFalse(quick_filter("Предлагаю услуги дизайна, беру заказы"))
+
+    def test_generated_buyer_phrase_requires_clear_order_intent(self):
+        self.assertTrue(is_buyer_query_phrase("ищу разработчика бота"))
+        self.assertTrue(is_buyer_query_phrase("сколько стоит заказать сайт"))
+        self.assertFalse(is_buyer_query_phrase("примеры работ по дизайну"))
+        self.assertFalse(is_buyer_query_phrase("скидки на услуги"))
+        self.assertFalse(is_buyer_query_phrase("ищу партнёра для проекта"))
 
     def test_catalog_item_is_selected_from_full_item_list(self):
         items = _prepare_items(

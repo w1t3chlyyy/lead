@@ -16,6 +16,7 @@ from telethon.tl.functions.messages import SearchGlobalRequest
 from telethon.tl.types import Channel, InputMessagesFilterEmpty, InputPeerEmpty, Message
 
 from . import catalog, db, llm, tg, ui
+from .keywords import is_buyer_query_phrase
 from .config import (LLM_DAILY_CAP, MAX_AGE_LIMIT_DAYS, MAX_PUSH_PER_RUN, OWNER_IDS, TG_API_HASH, TG_API_ID,
                      TG_SESSION_STRING)
 from .keywords import DEFAULT_QUERIES, quick_filter
@@ -127,8 +128,11 @@ async def _scan(http, client, cfg, st, t0, budget, greedy=False, stop_on_lead=Fa
     days = max(1, min(int(cfg["max_age_days"]), MAX_AGE_LIMIT_DAYS))
     cutoff = db.now() - timedelta(days=days)
     n = 40 if greedy else int(cfg["queries_per_run"])  # greedy: идём по всем фразам, пока хватает времени
-    queries = await db.sel(http, "lb_queries", select="id,q,hits", active="eq.true",
-                           order="last_run.asc.nullsfirst", limit=str(n))
+    # Ignore legacy search terms that mainly find sellers' ads/tutorials. Fetch
+    # the full active bank first so low-intent rows cannot crowd out useful ones.
+    query_rows = await db.sel(http, "lb_queries", select="id,q,hits", active="eq.true",
+                              order="last_run.asc.nullsfirst", limit="1000")
+    queries = [q for q in query_rows if is_buyer_query_phrase(q.get("q", ""))][:n]
     catalog_items = await catalog.get_items(http)
     bad = [r["text"] for r in await db.sel(http, "lb_leads", select="text", status="eq.bad",
                                            order="created_at.desc", limit="5")]

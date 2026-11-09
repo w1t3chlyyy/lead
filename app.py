@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 import traceback
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, Response
+
+# HTTPX logs full request URLs at INFO; Telegram Bot API URLs contain BOT_TOKEN.
+for _logger_name in ("httpx", "httpcore"):
+    logging.getLogger(_logger_name).setLevel(logging.WARNING)
 
 from core.web import JSON, Req, encode
 from routes import bot, digest, scan, setup, stats

@@ -35,3 +35,24 @@ DEFAULT_QUERIES = [
     "заказать разработку", "ищу дизайнера", "заказать дизайн", "купить подписку",
     "хочу заказать", "нужна помощь с проектом", "need a developer", "looking for a designer",
 ]
+
+# Phrase generation must favor buyer-authored requests, not search terms that
+# mostly match sellers' promotions or tutorial content.
+BUYER_QUERY_INTENT = re.compile(
+    r"\b(?:ищу|ищем|нужен|нужна|нужно|нужны|надо|хочу|хотим|купить|куплю|"
+    r"заказать|закажу|заказ|на\s+заказ|посоветуйте|порекомендуйте|подскажите|"
+    r"кто\s+(?:может|сделает|умеет)|сколько\s+стоит|цена|стоимость|"
+    r"need|looking\s+for|want\s+to|buy|order|recommend|how\s+much)\b",
+    re.I,
+)
+LOW_INTENT_QUERY = re.compile(
+    r"\b(?:скидк\w*|тариф\w*|портфолио|примеры?\s+работ|как\s+сделать|"
+    r"бесплатн\w*|предлагаю|продам|в\s+наличии|партн[её]р\w*|соосновател\w*|"
+    r"коллаборац\w*|взаимопиар|в\s+команду)\b",
+    re.I,
+)
+
+
+def is_buyer_query_phrase(query: str) -> bool:
+    """Keep generated search phrases that look like buyer requests."""
+    return bool(query and BUYER_QUERY_INTENT.search(query) and not LOW_INTENT_QUERY.search(query))
